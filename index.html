@@ -63,17 +63,18 @@
         const responseElem = document.getElementById('response');
         const seatMatrixContainer = document.getElementById('seatMatrixContainer');
 
-        async function fetchAndRenderSeats() {
+        async function fetchAndRenderAllSeats() {
             try {
                 const res = await fetch('/booking/show');
                 const seatMatrix = await res.json();
 
-                seatMatrixContainer.innerHTML = ''; // Clear existing seats
+                seatMatrixContainer.innerHTML = '';
 
                 seatMatrix.forEach((row, i) => {
                     row.forEach((seat, j) => {
                         const seatElem = document.createElement('div');
                         seatElem.classList.add('seat');
+                        seatElem.id = `seat-${i}-${j}`; // Assign a unique ID
 
                         if (seat) {
                             seatElem.classList.add('booked');
@@ -91,9 +92,33 @@
                 responseElem.textContent = 'Error fetching seat matrix: ' + error.message;
             }
         }
+        
+        // This function will be called by the SSE listener
+        function updateSingleSeat(booking) {
+            const seatElem = document.getElementById(`seat-${booking.row}-${booking.col}`);
+            if (seatElem) {
+                seatElem.classList.remove('available');
+                seatElem.classList.add('booked');
+                const tooltipText = `Booked by ${booking.data.name} on ${booking.data.date}`;
+                seatElem.setAttribute('data-tooltip', tooltipText);
+                seatElem.textContent = 'B';
+            }
+        }
 
-        // Fetch and render seats when the page first loads
-        document.addEventListener('DOMContentLoaded', fetchAndRenderSeats);
+        // Fetch and render all seats on initial page load
+        document.addEventListener('DOMContentLoaded', () => {
+            fetchAndRenderAllSeats();
+            
+            // NEW: Use EventSource to listen for SSE updates
+            const eventSource = new EventSource('/booking/stream');
+
+            eventSource.onmessage = function(event) {
+                const booking = JSON.parse(event.data);
+                if (booking.event !== "ping") {
+                    updateSingleSeat(booking);
+                }
+            };
+        });
     </script>
 </body>
 </html>

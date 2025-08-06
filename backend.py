@@ -1,8 +1,10 @@
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, jsonify, request, send_from_directory,Response
 import threading
-import os
+import os,json
+from queue import Queue
 
 app = Flask(__name__)
+booking_events = Queue()
 
 # ... (your existing TicketBooking class remains unchanged) ...
 class TicketBooking:
@@ -26,16 +28,33 @@ class TicketBooking:
         with self.lock:
             for i in range(len(self.seat_matrix)):
                 for j in range(len(self.seat_matrix[i])):
-                    if self.seat_matrix[i][j] is None:
-                        # Store the booking data directly in the matrix
-                        self.seat_matrix[i][j] = {"name": name, "date": date}
-                        return jsonify({"message": f"Seat booked at ({i},{j}) for {name}"})
+                        if self.seat_matrix[i][j] is None:
+                            # Store the booking data directly in the matrix
+                            self.seat_matrix[i][j] = {"name": name, "date": date}
+                            booking_events.put({"row": i, "col": j, "data": self.seat_matrix[i][j]})
+                            return jsonify({"message": f"Seat booked at ({i},{j}) for {name}"})
+
         
         return jsonify({"message": "No seats available"})
 
     def show(self):
         # Return seat matrix as JSON
         return jsonify(self.seat_matrix)
+
+
+def event_stream():
+    while True:
+        try:
+            event=booking_events.get(timeout=10)
+            yield f'data: {json.dumps(event)}\n\n'
+        except Queue.Empty:
+            yield 'data: {"event": "ping"}\n\n' 
+
+@app.route('/stream')
+def stream():
+    return Response(event_stream(), mimetype="text/event-stream")
+
+
 
 handler = TicketBooking()
 
