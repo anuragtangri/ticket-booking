@@ -24,7 +24,7 @@ def make_booking(thread_id):
 if __name__=="__main__":
     num_threads=100
     threads=[]
-    time.sleep(10)
+    time.sleep(5)
 
     start_time=time.time()
 
