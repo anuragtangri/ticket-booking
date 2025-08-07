@@ -11,19 +11,19 @@
         }
         .seat-matrix {
             display: grid;
-            grid-template-columns: repeat(50, 15px);
+            grid-template-columns: repeat(5, 30px);
             gap: 2px;
             margin: 20px auto;
             width: fit-content;
         }
         .seat {
-            width: 15px;
-            height: 15px;
+            width: 30px;
+            height: 30px;
             border: 1px solid #ccc;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 8px;
+            font-size: 12px;
             box-sizing: border-box;
         }
         .available {
@@ -33,8 +33,16 @@
             background-color: #66bb6a;
             color: white;
             position: relative;
+            cursor: not-allowed;
         }
-        .booked::after {
+        .reserved {
+            background-color: #ff9800;
+            color: white;
+            position: relative;
+            cursor: not-allowed;
+        }
+        .booked::after,
+        .reserved::after {
             content: attr(data-tooltip);
             position: absolute;
             bottom: 100%;
@@ -49,22 +57,96 @@
             pointer-events: none;
             transition: opacity 0.3s;
         }
-        .booked:hover::after {
+        .booked:hover::after,
+        .reserved:hover::after {
             opacity: 1;
+        }
+        .available {
+            background-color: #e0e0e0;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .available:hover {
+            background-color: #d0d0d0;
+        }
+        .selected {
+            background-color: #2196f3;
+            color: white;
+        }
+        .booking-form {
+            margin: 20px auto;
+            max-width: 400px;
+            padding: 20px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            background-color: #f9f9f9;
+        }
+        .booking-form input {
+            width: 100%;
+            padding: 8px;
+            margin: 5px 0;
+            border: 1px solid #ddd;
+            border-radius: 3px;
+            box-sizing: border-box;
+        }
+        .booking-form button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        .booking-form button:hover {
+            background-color: #45a049;
+        }
+        .booking-form button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        .status {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 3px;
+        }
+        .status.success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .status.error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
         }
     </style>
 </head>
 <body>
     <h1>Seat Matrix</h1>
     <div id="seatMatrixContainer" class="seat-matrix"></div>
-    <p id="response"></p>
-
-    <button id="resetButton">Reset Seats</button>
+    
+    <div class="booking-form">
+        <h3>Book a Seat</h3>
+        <div id="selectedSeatInfo"></div>
+        <input type="text" id="nameInput" placeholder="Enter your name" required>
+        <input type="date" id="dateInput" required>
+        <button id="bookButton" disabled>Book Seat</button>
+        <button id="resetButton">Reset All Seats</button>
+    </div>
+    
+    <div id="status" class="status" style="display: none;"></div>
 
     <script>
-        const responseElem = document.getElementById('response');
         const seatMatrixContainer = document.getElementById('seatMatrixContainer');
         const resetButton = document.getElementById('resetButton');
+        const bookButton = document.getElementById('bookButton');
+        const nameInput = document.getElementById('nameInput');
+        const dateInput = document.getElementById('dateInput');
+        const selectedSeatInfo = document.getElementById('selectedSeatInfo');
+        const statusDiv = document.getElementById('status');
+        
+        let selectedSeat = null;
 
         async function fetchAndRenderAllSeats() {
             try {
@@ -80,28 +162,121 @@
                         seatElem.id = `seat-${i}-${j}`;
 
                         if (seat) {
-                            seatElem.classList.add('booked');
-                            const tooltipText = `Booked by ${seat.name} on ${seat.date}`;
-                            seatElem.setAttribute('data-tooltip', tooltipText);
-                            seatElem.textContent = 'B';
+                            if (seat.status === 'reserved') {
+                                seatElem.classList.add('reserved');
+                                const tooltipText = `Reserved by ${seat.name} on ${seat.date} (Awaiting Payment)`;
+                                seatElem.setAttribute('data-tooltip', tooltipText);
+                                seatElem.textContent = 'R';
+                            } else {
+                                seatElem.classList.add('booked');
+                                const tooltipText = `Booked by ${seat.name} on ${seat.date}`;
+                                seatElem.setAttribute('data-tooltip', tooltipText);
+                                seatElem.textContent = 'B';
+                            }
                         } else {
                             seatElem.classList.add('available');
                             seatElem.textContent = '*';
+                            seatElem.addEventListener('click', () => selectSeat(i, j));
                         }
                         seatMatrixContainer.appendChild(seatElem);
                     });
                 });
             } catch (error) {
-                responseElem.textContent = 'Error fetching seat matrix: ' + error.message;
+                showStatus('Error fetching seat matrix: ' + error.message, 'error');
             }
         }
         
+        function selectSeat(row, col) {
+            // Clear previous selection
+            if (selectedSeat) {
+                const prevSeat = document.getElementById(`seat-${selectedSeat.row}-${selectedSeat.col}`);
+                if (prevSeat && !prevSeat.classList.contains('booked')) {
+                    prevSeat.classList.remove('selected');
+                }
+            }
+            
+            // Select new seat
+            selectedSeat = { row, col };
+            const seatElem = document.getElementById(`seat-${row}-${col}`);
+            seatElem.classList.add('selected');
+            
+            selectedSeatInfo.innerHTML = `<p><strong>Selected Seat:</strong> Row ${row + 1}, Column ${col + 1}</p>`;
+            bookButton.disabled = false;
+        }
+        
+        async function bookSelectedSeat() {
+            if (!selectedSeat) {
+                showStatus('Please select a seat first', 'error');
+                return;
+            }
+            
+            const name = nameInput.value.trim();
+            const date = dateInput.value;
+            
+            if (!name || !date) {
+                showStatus('Please fill in both name and date', 'error');
+                return;
+            }
+            
+            try {
+                bookButton.disabled = true;
+                bookButton.textContent = 'Reserving...';
+                
+                const response = await fetch('/booking', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        name: name,
+                        date: date
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    showStatus(`Seat reserved! Redirecting to payment...`, 'success');
+                    
+                    // Clear form
+                    nameInput.value = '';
+                    dateInput.value = '';
+                    selectedSeat = null;
+                    selectedSeatInfo.innerHTML = '';
+                    
+                    // Redirect to payment page
+                    setTimeout(() => {
+                        window.location.href = result.payment_url;
+                    }, 1500);
+                } else {
+                    showStatus(result.message || 'Reservation failed', 'error');
+                }
+            } catch (error) {
+                showStatus('Error making reservation: ' + error.message, 'error');
+            } finally {
+                bookButton.disabled = false;
+                bookButton.textContent = 'Book Seat';
+            }
+        }
+        
+        function showStatus(message, type) {
+            statusDiv.textContent = message;
+            statusDiv.className = `status ${type}`;
+            statusDiv.style.display = 'block';
+            
+            // Auto-hide after 5 seconds
+            setTimeout(() => {
+                statusDiv.style.display = 'none';
+            }, 5000);
+        }
+        
         function updateSingleSeat(booking) {
-            const seatElem = document.getElementById(`seat-${booking.row}-${booking.col}`);
+            console.log('Updating seat:', booking);
+            const seatElem = document.getElementById(`seat-${booking.seat.row}-${booking.seat.col}`);
             if (seatElem) {
                 seatElem.classList.remove('available');
                 seatElem.classList.add('booked');
-                const tooltipText = `Booked by ${booking.data.name} on ${booking.data.date}`;
+                const tooltipText = `Booked by ${booking.seat.data.name} on ${booking.seat.data.date}`;
                 seatElem.setAttribute('data-tooltip', tooltipText);
                 seatElem.textContent = 'B';
             }
@@ -110,28 +285,47 @@
         resetButton.addEventListener('click', async () => {
             try {
                 await fetch('/booking/reset', { method: 'POST' });
-                responseElem.textContent = 'Seats reset successfully.';
+                showStatus('All seats have been reset successfully.', 'success');
+                // Clear selection
+                selectedSeat = null;
+                selectedSeatInfo.innerHTML = '';
+                bookButton.disabled = true;
                 // Refresh the display after resetting the seats
-                fetchAndRenderAllSeats();
+                await fetchAndRenderAllSeats();
             } catch (error) {
-                responseElem.textContent = 'Error resetting seats: ' + error.message;
+                showStatus('Error resetting seats: ' + error.message, 'error');
             }
         });
         
+        bookButton.addEventListener('click', bookSelectedSeat);
+        
         // Initial setup for the page
         document.addEventListener('DOMContentLoaded', () => {
+            // Set default date to today
+            const today = new Date().toISOString().split('T')[0];
+            dateInput.value = today;
+            
             fetchAndRenderAllSeats();
             
             const eventSource = new EventSource('/booking/stream');
             eventSource.onmessage = function(event) {
                 try {
-                    const booking = JSON.parse(event.data);
-                    if (booking.event !== "ping") {
-                        updateSingleSeat(booking);
+                    const data = JSON.parse(event.data);
+                    console.log('SSE Event received:', data);
+                    
+                    if (data.event === "booking_update" && data.seat) {
+                        updateSingleSeat(data);
+                    } else if (data.event === "seats_reset") {
+                        console.log('Seats reset event received');
+                        fetchAndRenderAllSeats();
                     }
                 } catch (e) {
-                    // Ignore parsing errors for pings or other non-JSON data
+                    console.log('SSE parsing error:', e);
                 }
+            };
+            
+            eventSource.onerror = function(event) {
+                console.log('SSE connection error:', event);
             };
         });
     </script>

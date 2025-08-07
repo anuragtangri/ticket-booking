@@ -1,7 +1,7 @@
 import time
 import threading,requests
 
-FLASK_URL = "http://127.0.0.1:5000"
+FLASK_URL = "http://127.0.0.1:5001"
 
 def make_booking(thread_id):
     """
@@ -38,4 +38,4 @@ if __name__=="__main__":
     
     end_time=time.time()
     print(f"\nAll {num_threads} booking attempts completed in {end_time - start_time:.2f} seconds.")
-    print("Check the seat matrix at http://127.0.0.1:5000/booking/show to see the results.")
+    print("Check the seat matrix at http://127.0.0.1:5001/booking/show to see the results.")
